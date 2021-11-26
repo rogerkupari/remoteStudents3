@@ -11,3 +11,7 @@
 *main.d
 *main.o
 *subdir.mk
+*.elf
+*.elf.size
+*.o
+*.d
