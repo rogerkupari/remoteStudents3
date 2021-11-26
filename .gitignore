@@ -3,16 +3,8 @@
 /*/*
 !.gitignore
 !/dcConverter/
-!/dcConverter/src/
-!/dcConverter/src/*
-!/dcConverter/Tasks/
-!/dcConverter/Tasks/*
-!/dcConverter/OS/
-!/dcConverter/OS/*
+!/dcConverter/*
 !/zybo_bsp/
 !/zybo_bsp/*
 !/zybo_hw/
 !/zybo_hw/*
-*.project
-*.cproject
-*.sdkproject
