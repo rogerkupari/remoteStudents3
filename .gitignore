@@ -8,3 +8,6 @@
 !/zybo_bsp/*
 !/zybo_hw/
 !/zybo_hw/*
+*main.d
+*main.o
+*subdir.mk
