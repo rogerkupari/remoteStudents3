@@ -2,7 +2,7 @@
 #include "zynq_registers.h"
 #include "xttcps.h"
 #include "OS_includes.h"
-#include <stdlib.h>
+#include <stdio.h>
 
 
 
