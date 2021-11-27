@@ -20,7 +20,7 @@ void pi_ctrl_task(void *params){
 	float testKp = 2.0;
 	float testKi = 3.0;
 	float testMin = 0.0;
-	float testMax = 1.0;
+	float testMax = 5.0;
 	float testRef = 0.0;
 	float testMeas = 0.0;
 	float testOut = 0.0;
@@ -35,8 +35,8 @@ void pi_ctrl_task(void *params){
 		// float PIController(float Kp, float Ki, float st, float min, float max, float ref, float meas);
 		float Pi_out = PIController(_PI_ctrl.kp, _PI_ctrl.ki, _PI_ctrl.st, _PI_ctrl.min, _PI_ctrl.max, _PI_ctrl.ref, _PI_ctrl.meas);
 		float measurement = converterModel(Pi_out);
-
-		uint16_t pwm_output = (uint16_t) (measurement * 65535);
+		_PI_ctrl.meas = measurement;
+		uint16_t pwm_output = (uint16_t) ((Pi_out - _PI_ctrl.min)/(_PI_ctrl.max - _PI_ctrl.min) * 65535); // Pi_out normalized to range [0,1]
 		TTC0_MATCH_0 = TTC0_MATCH_1_COUNTER_2 = TTC0_MATCH_1_COUNTER_3 = pwm_output;
 
 		// Referenssiarvon säätö napeilla
