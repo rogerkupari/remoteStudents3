@@ -3,6 +3,7 @@
 #include "xttcps.h"
 #include "OS_includes.h"
 #include <stdio.h>
+#include <math.h>
 
 
 
@@ -25,6 +26,8 @@ void pi_ctrl_task(void *params){
 	float testMeas = 0.0;
 	float testOut = 0.0;
 
+	float outputAC = 0.0;
+
 	// for buttons
 	int counter = 0;
 	int button_released = 1;
@@ -32,10 +35,16 @@ void pi_ctrl_task(void *params){
 	pi_init(testKp, testKi, SAMPLE_TIME_SECONDS, testMin, testMax, testRef , testMeas, testOut);
 
 	for(;;){
-		// float PIController(float Kp, float Ki, float st, float min, float max, float ref, float meas);
 		float Pi_out = PIController(_PI_ctrl.kp, _PI_ctrl.ki, _PI_ctrl.st, _PI_ctrl.min, _PI_ctrl.max, _PI_ctrl.ref, _PI_ctrl.meas);
-		float measurement = converterModel(Pi_out);
+		float measurement = converterModel(Pi_out);		// Amplitude of output voltage
 		_PI_ctrl.meas = measurement;
+		outputAC = DCtoAC(measurement);		// AC output, f=50 Hz Amplitude=PI_out
+
+		// CSV printtaus
+		char charbuf[100];
+		sprintf(charbuf, ",%f", outputAC);
+		xil_printf(charbuf);
+
 		uint16_t pwm_output = (uint16_t) ((Pi_out - _PI_ctrl.min)/(_PI_ctrl.max - _PI_ctrl.min) * 65535); // Pi_out normalized to range [0,1]
 		TTC0_MATCH_0 = TTC0_MATCH_1_COUNTER_2 = TTC0_MATCH_1_COUNTER_3 = pwm_output;
 
@@ -51,13 +60,16 @@ void pi_ctrl_task(void *params){
 			button_released = 1;
 		}
 
-		if (counter == 1000) {
-			char charbuf[100];
-			sprintf(charbuf, "SetPoint =: %f\nPI out: %f\nModel out: %f\r\nMatch value: %d\n\n", _PI_ctrl.ref, Pi_out, measurement, pwm_output);
-			xil_printf(charbuf);
-			counter = 0;
-		}
-		counter++;
+		//if (counter == 1000) {
+
+			//char charbuf[100];
+			//sprintf(charbuf, "SetPoint =: %f\nPI out: %f\nModel out: %f\r\nMatch value: %d\n\n", _PI_ctrl.ref, Pi_out, measurement, pwm_output);
+			//xil_printf(charbuf);
+
+
+			//counter = 0;
+		//}
+		//counter++;
 
 
 		vTaskDelay(1);
@@ -124,6 +136,21 @@ float PIController(float Ki, float Kp, float st, float min, float max, float ref
 		else{
 			return (u1 + u2);
 		}
+}
+
+float DCtoAC(float u){
+	// Converts converter model output from DC to AC
+	//FreeRTOS tick rate must be divisible by output frequency to eliminate phase error when sineCounter resets
+	// library "m" must be added to project C/C++ Build settings/linker/libraries for sin function
+	static int sineCounter = 0;
+
+	if (sineCounter == (int) (configTICK_RATE_HZ/OUTPUT_FREQ)){
+		sineCounter = 0;
+	}
+
+	float uAC = u * sin(2 * M_PI * OUTPUT_FREQ * 1/configTICK_RATE_HZ * sineCounter);
+	sineCounter++;
+	return uAC;
 }
 
 

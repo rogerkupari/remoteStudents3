@@ -7,7 +7,7 @@ void test_task(void *params){
 	AXI_LED_DATA = 1;
 	for(;;){
 
-		xil_printf("hello from test task\n");
+		//xil_printf("hello from test task\n");
 		if((AXI_LED_DATA & 0xF) == 0xF){
 			AXI_LED_DATA = 1;
 		}
