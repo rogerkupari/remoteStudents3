@@ -8,6 +8,10 @@
 !/zybo_bsp/*
 !/zybo_hw/
 !/zybo_hw/*
+!/zybo_20_bsp/
+!/zybo_20_bsp/*
+!/zybo_20_hw/
+!/zybo_20_hw/*
 *main.d
 *main.o
 *subdir.mk
