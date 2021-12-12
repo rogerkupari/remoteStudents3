@@ -4,6 +4,7 @@
 #include "OS_includes.h"
 #include <stdio.h>
 #include <stdbool.h>
+#include <math.h>
 
 
 
@@ -16,6 +17,8 @@ void pi_ctrl_task(void *params){
 	float testMax = 5.0;
 	float testMeas = 0.0;
 	float testOut = 0.0;
+
+	float outputAc = 0.0;
 
 	// wait while ki/kp/setpoint pointers are uninitialized state
 	while(g_ki_param_ptr == NULL || g_kp_param_ptr == NULL || g_sp_param_ptr == NULL){
@@ -30,6 +33,10 @@ void pi_ctrl_task(void *params){
 			float Pi_out = PIController(_PI_ctrl.kp, _PI_ctrl.ki, _PI_ctrl.st, _PI_ctrl.min, _PI_ctrl.max, _PI_ctrl.sp, _PI_ctrl.meas);
 			float measurement = converterModel(Pi_out);
 			_PI_ctrl.meas = measurement;
+
+			outputAc = dc_to_ac(measurement);
+
+
 			uint16_t pwm_output = (uint16_t) ((Pi_out - _PI_ctrl.min)/(_PI_ctrl.max - _PI_ctrl.min) * 65535); // Pi_out normalized to range [0,1]				TTC0_MATCH_0 = TTC0_MATCH_1_COUNTER_2 = TTC0_MATCH_1_COUNTER_3 = pwm_output;
 
 			TTC0_MATCH_0 = TTC0_MATCH_1_COUNTER_2 = TTC0_MATCH_1_COUNTER_3 = pwm_output;
@@ -47,11 +54,12 @@ void pi_ctrl_task(void *params){
 			}
 			*/
 			char charbuf[150];
-			sprintf(charbuf, "SP:%.2f, PI:%.2f, Meas:%.2f, Match:%d, Ki:%.2f, Kp:%.2f\n", *_PI_ctrl.sp, Pi_out, measurement, pwm_output, *_PI_ctrl.ki, *_PI_ctrl.kp);
+
+			sprintf(charbuf, "SP:%.2f, PI:%.2f, Meas:%.2f, Ki:%.2f, Kp:%.2f, Ac:%.2f\n", *_PI_ctrl.sp, Pi_out, measurement, *_PI_ctrl.ki, *_PI_ctrl.kp, outputAc);
 			xil_printf(charbuf);
 
 
-			vTaskDelay(60);
+			vTaskDelay(100);
 		}
 		else {
 			if(TTC0_MATCH_0 || TTC0_MATCH_1_COUNTER_2 || TTC0_MATCH_1_COUNTER_3){
@@ -125,6 +133,21 @@ float PIController(volatile float *Ki, volatile float *Kp, float st, float min, 
 		else{
 			return (u1 + u2);
 		}
+}
+
+float dc_to_ac(float u){
+	// Converts converter model output from DC to AC
+	//FreeRTOS tick rate must be divisible by output frequency to eliminate phase error when sineCounter resets
+	// library "m" must be added to project C/C++ Build settings/linker/libraries for sin function
+	static int sineCounter = 0;
+
+	if (sineCounter == (int) (configTICK_RATE_HZ/OUTPUT_FREQ)){
+		sineCounter = 0;
+	}
+
+	float uAC = u * sin(2 * M_PI * OUTPUT_FREQ * 1/configTICK_RATE_HZ * sineCounter);
+	sineCounter++;
+	return uAC;
 }
 
 

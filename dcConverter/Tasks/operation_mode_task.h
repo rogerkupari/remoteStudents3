@@ -4,8 +4,8 @@
 #include "zynq_registers.h"
 #include <stdbool.h>
 
-#define K_PARAMETER_CHANGE 0.05f
-#define SP_PARAMETER_CHANGE 1.00f
+#define K_PARAMETER_CHANGE 1.00f
+#define SP_PARAMETER_CHANGE 0.10f
 
 
 typedef struct {
