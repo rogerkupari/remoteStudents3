@@ -3,74 +3,75 @@
 #include "xttcps.h"
 #include "OS_includes.h"
 #include <stdio.h>
+#include <stdbool.h>
 
 
 
-/* TODO
- * - Pointer attributes
- * - Button supervision task or interrupt system
- * - State machine task or semaphores for mode changes
- *   + mode functionality
- */
 
 
 void pi_ctrl_task(void *params){
 
-	// init values
-	float testKp = 2.0;
-	float testKi = 3.0;
+
 	float testMin = 0.0;
 	float testMax = 5.0;
-	float testRef = 0.0;
 	float testMeas = 0.0;
 	float testOut = 0.0;
 
-	// for buttons
-	int counter = 0;
-	int button_released = 1;
-
-	pi_init(testKp, testKi, SAMPLE_TIME_SECONDS, testMin, testMax, testRef , testMeas, testOut);
+	// wait while ki/kp/setpoint pointers are uninitialized state
+	while(g_ki_param_ptr == NULL || g_kp_param_ptr == NULL || g_sp_param_ptr == NULL){
+		vTaskDelay(10);
+	}
+	pi_init(g_kp_param_ptr, g_ki_param_ptr, SAMPLE_TIME_SECONDS, testMin, testMax, g_sp_param_ptr , testMeas, testOut);
 
 	for(;;){
-		// float PIController(float Kp, float Ki, float st, float min, float max, float ref, float meas);
-		float Pi_out = PIController(_PI_ctrl.kp, _PI_ctrl.ki, _PI_ctrl.st, _PI_ctrl.min, _PI_ctrl.max, _PI_ctrl.ref, _PI_ctrl.meas);
-		float measurement = converterModel(Pi_out);
-		_PI_ctrl.meas = measurement;
-		uint16_t pwm_output = (uint16_t) ((Pi_out - _PI_ctrl.min)/(_PI_ctrl.max - _PI_ctrl.min) * 65535); // Pi_out normalized to range [0,1]
-		TTC0_MATCH_0 = TTC0_MATCH_1_COUNTER_2 = TTC0_MATCH_1_COUNTER_3 = pwm_output;
 
-		// Referenssiarvon säätö napeilla
-		// Vain PI-säätimen ja mallin testausta varten
-		if (AXI_BTN_DATA == 0b0001 && button_released) {
-			_PI_ctrl.ref += 0.05;
-			button_released = 0;
-		} else if (AXI_BTN_DATA == 0b0010 && button_released) {
-			_PI_ctrl.ref -= 0.05;
-			button_released = 0;
-		} else if (AXI_BTN_DATA == 0b0000) {
-			button_released = 1;
-		}
+		if(is_g_modulation_semaphore_free()){
+			// float PIController(float Kp, float Ki, float st, float min, float max, float ref, float meas);
+			float Pi_out = PIController(_PI_ctrl.kp, _PI_ctrl.ki, _PI_ctrl.st, _PI_ctrl.min, _PI_ctrl.max, _PI_ctrl.sp, _PI_ctrl.meas);
+			float measurement = converterModel(Pi_out);
+			_PI_ctrl.meas = measurement;
+			uint16_t pwm_output = (uint16_t) ((Pi_out - _PI_ctrl.min)/(_PI_ctrl.max - _PI_ctrl.min) * 65535); // Pi_out normalized to range [0,1]				TTC0_MATCH_0 = TTC0_MATCH_1_COUNTER_2 = TTC0_MATCH_1_COUNTER_3 = pwm_output;
 
-		if (counter == 1000) {
-			char charbuf[100];
-			sprintf(charbuf, "SetPoint =: %f\nPI out: %f\nModel out: %f\r\nMatch value: %d\n\n", _PI_ctrl.ref, Pi_out, measurement, pwm_output);
+			TTC0_MATCH_0 = TTC0_MATCH_1_COUNTER_2 = TTC0_MATCH_1_COUNTER_3 = pwm_output;
+			/*
+			// Referenssiarvon säätö napeilla
+			// Vain PI-säätimen ja mallin testausta varten
+			if (AXI_BTN_DATA == 0b0001 && button_released) {
+				_PI_ctrl.ref += 0.05;
+				button_released = 0;
+			} else if (AXI_BTN_DATA == 0b0010 && button_released) {
+				_PI_ctrl.ref -= 0.05;
+				button_released = 0;
+			} else if (AXI_BTN_DATA == 0b0000) {
+				button_released = 1;
+			}
+			*/
+			char charbuf[150];
+			sprintf(charbuf, "SP:%.2f, PI:%.2f, Meas:%.2f, Match:%d, Ki:%.2f, Kp:%.2f\n", *_PI_ctrl.sp, Pi_out, measurement, pwm_output, *_PI_ctrl.ki, *_PI_ctrl.kp);
 			xil_printf(charbuf);
-			counter = 0;
+
+
+			vTaskDelay(60);
 		}
-		counter++;
+		else {
+			if(TTC0_MATCH_0 || TTC0_MATCH_1_COUNTER_2 || TTC0_MATCH_1_COUNTER_3){
+				TTC0_MATCH_0 = TTC0_MATCH_1_COUNTER_2 = TTC0_MATCH_1_COUNTER_3 = 0;
+			}
+			vTaskDelay(20);
+		}
 
 
-		vTaskDelay(1);
+
 	}
 }
 
-void pi_init(float kp, float ki, float st, float min, float max, float ref, float meas, float out){
+void pi_init(volatile float *kp, volatile float *ki, float st, float min, float max, volatile float *sp, float meas, float out){
 	_PI_ctrl.kp = kp;
 	_PI_ctrl.ki = ki;
 	_PI_ctrl.st = st;
 	_PI_ctrl.min = min;
 	_PI_ctrl.max = max;
-	_PI_ctrl.ref = ref;
+	_PI_ctrl.sp = sp;
 	_PI_ctrl.meas = meas;
 	_PI_ctrl.out = out;
 
@@ -103,15 +104,15 @@ float converterModel(float u_in){
 		return u3;
 }
 
-float PIController(float Ki, float Kp, float st, float min, float max, float ref, float meas){
+float PIController(volatile float *Ki, volatile float *Kp, float st, float min, float max, volatile float *sp, float meas){
 	// PI Controller with negative feedback
 		static float u1_old = 0;
 		float u1;
 		float u2;
-		float error = ref - meas;
+		float error = *sp - meas;
 
-		u1 = u1_old + Ki * st * error;
-		u2 = Kp * error;
+		u1 = u1_old + *Ki * st * error;
+		u2 = *Kp * error;
 		u1_old = u1;
 
 		// Check controller saturation
