@@ -12,6 +12,7 @@ BEGIN OS
  PARAMETER stdin = ps7_uart_1
  PARAMETER stdout = ps7_uart_1
  PARAMETER tick_rate = 1000
+ PARAMETER use_timeslicing = false
 END
 
 

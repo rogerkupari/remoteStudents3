@@ -4,12 +4,12 @@
 #define SAMPLE_TIME_SECONDS 0.00002F
 
 typedef struct {
-	float kp;
-	float ki;
+	volatile float *kp;
+	volatile float *ki;
 	float st; // sampletime
 	float min;
 	float max;
-	float ref;
+	volatile float *sp; // setpoint
 	float meas;
 	float out;
 } PI_ctrl_def_t;
@@ -29,9 +29,9 @@ static const float B[6] = {0.0471, 0.0377, 0.0404, 0.0485, 0.0373, 0.0539};
 
 
 void pi_ctrl_task(void *params);
-void pi_init(float kp, float ki, float st, float min, float max, float ref, float meas, float out);
+void pi_init(volatile float *kp, volatile float *ki, float st, float min, float max, volatile float *sp, float meas, float out);
 float converterModel(float u_in);
-float PIController(float Kp, float Ki, float st, float min, float max, float ref, float meas);
+float PIController(volatile float *Kp, volatile float *Ki, float st, float min, float max, volatile float *sp, float meas);
 
 
 #endif
