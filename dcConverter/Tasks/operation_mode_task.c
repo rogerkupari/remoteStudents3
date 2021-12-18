@@ -27,10 +27,26 @@ void operation_mode_task(void *params){
 	g_kp_param_ptr = &kp_param_value;
 	g_sp_param_ptr = &sp_param_value;
 
+	xil_printf("button 0 = configuration/idle/modulation mode\n");
+	xil_printf("button 1 = change kp or ki / none / none \n");
+	xil_printf("button 2 = decrease active parameter / none / decrease set point \n");
+	xil_printf("button 3 = increase active parameter / none / increase set point \n");
+
+	xil_printf("uart '0' = configuration mode\n");
+	xil_printf("uart '1' = idle mode\n");
+	xil_printf("uart '2' = modulation mode\n");
+	xil_printf("uart '*' = change ki or kp in configuration mode \n");
+	xil_printf("uart '+' = increase active parameter in configuration mode \n");
+	xil_printf("uart '+' = increase setpoint in configuration mode \n");
+	xil_printf("uart '+' = decrease active parameter in configuration mode \n");
+	xil_printf("uart '+' = decrease setpoint in configuration mode \n");
+
+
+
 
 	for(;;){
 
-
+		check_messages();
 		read_buttons(&button_operations);
 		check_mode_and_buttons(&button_operations);
 		led_indications(&mode_of_operation);
@@ -46,77 +62,26 @@ void operation_mode_task(void *params){
 void check_mode_and_buttons(volatile Button_operations_def_t *o){
 	switch (mode_of_operation) {
 		case MODE_CONF:
-			if(is_semaphore_free()){
-				take_semaphore();
-			}
-			if(o->btn1){
-				active_parameter = active_parameter == PARAM_KI ? PARAM_KP : PARAM_KI;
-				printed = false;
-				o->done = true;
+			if(is_modulation_semaphore_free()){
+				take_modulation_semaphore();
 			}
 			if(!printed) print_message(MODE_CONF);
-			if(o->btn2){
-				switch (active_parameter) {
-					case PARAM_KI:
-						increase_ki();
-						print_parameter_value();
-						break;
-					case PARAM_KP:
-						increase_kp();
-						print_parameter_value();
-						break;
-					default:
-						break;
-				}
-			}
-			if(o->btn3){
-				switch (active_parameter) {
-					case PARAM_KI:
-						decrease_ki();
-						print_parameter_value();
-						break;
-					case PARAM_KP:
-						decrease_kp();
-						print_parameter_value();
-						break;
-					default:
-						break;
-				}
-			}
-			if(o->btn0){
-				mode_of_operation = MODE_IDLE;
-				printed = false;
-				o->done = true;
-			}
+			operate_by_buttons(mode_of_operation, o);
 			break;
 		case MODE_IDLE:
-			if(is_semaphore_free()){
-				take_semaphore();
+			if(is_modulation_semaphore_free()){
+				take_modulation_semaphore();
 			}
 			if(!printed) print_message(MODE_IDLE);
-			if(o->btn0){
-				mode_of_operation = MODE_MODULATION;
-				printed = false;
-				o->done = true;
-			}
+			operate_by_buttons(mode_of_operation, o);
 
 			break;
 		case MODE_MODULATION:
-			if(!is_semaphore_free()){
-				release_semaphore();
+			if(!is_modulation_semaphore_free()){
+				release_modulation_semaphore();
 			} else {
 				if(!printed) print_message(MODE_MODULATION);
-				if(o->btn2){
-					increase_sp();
-				}
-				if(o->btn3){
-					decrease_sp();
-				}
-				if(o->btn0){
-					mode_of_operation = MODE_CONF;
-					printed = false;
-					o->done = true;
-				}
+				operate_by_buttons(mode_of_operation, o);
 			}
 			break;
 		default:
@@ -197,9 +162,9 @@ void led_indications(volatile mode_of_operation_def_t *mode){
 	AXI_LED_DATA = (1<<*mode);
 }
 
-bool take_semaphore(){
+bool take_modulation_semaphore(){
 	// already taken
-	if(!is_semaphore_free()){
+	if(!is_modulation_semaphore_free()){
 		return true;
 	}
 
@@ -208,9 +173,9 @@ bool take_semaphore(){
 	}
 	return true;
 }
-bool release_semaphore(){
+bool release_modulation_semaphore(){
 	// already free
-	if(is_semaphore_free()){
+	if(is_modulation_semaphore_free()){
 		return true;
 	}
 
@@ -220,8 +185,35 @@ bool release_semaphore(){
 
 	return true;
 }
-bool is_semaphore_free(){
+bool is_modulation_semaphore_free(){
 	return is_g_modulation_semaphore_free();
+}
+
+bool take_console_semaphore(){
+	// already taken
+	if(!is_console_semaphore_free()){
+		return true;
+	}
+
+	if(xSemaphoreTake(g_console_act_semaphore, (TickType_t) 10) != pdTRUE){
+		return false;
+	}
+	return true;
+}
+bool release_console_semaphore(){
+	// already free
+	if(is_console_semaphore_free()){
+		return true;
+	}
+
+	if(xSemaphoreGive(g_console_act_semaphore) != pdTRUE){
+		return false;
+	}
+
+	return true;
+}
+bool is_console_semaphore_free(){
+	return is_g_console_act_semaphore_free();
 }
 
 void increase_ki(void){
@@ -251,4 +243,166 @@ void print_parameter_value(void){
 		sprintf(b, "Kp value: %f\n", *g_kp_param_ptr);
 	}
 	xil_printf(b);
+}
+
+void operate_by_buttons(volatile mode_of_operation_def_t mode,volatile Button_operations_def_t *o){
+	// if configuration by console, do nothing
+	if(!is_console_semaphore_free()){
+		return;
+	}
+
+	// if operation needed, do it by single button and jump out
+	switch (mode) {
+		case MODE_CONF:
+			if(o->btn1){
+				active_parameter = active_parameter == PARAM_KI ? PARAM_KP : PARAM_KI;
+				printed = false;
+				o->done = true;
+				return;
+			}
+			if (o->btn3) {
+				switch (active_parameter) {
+				case PARAM_KI:
+					increase_ki();
+					print_parameter_value();
+					break;
+				case PARAM_KP:
+					increase_kp();
+					print_parameter_value();
+					break;
+				default:
+					break;
+				}
+				return;
+			}
+			if (o->btn2) {
+				switch (active_parameter) {
+				case PARAM_KI:
+					decrease_ki();
+					print_parameter_value();
+					break;
+				case PARAM_KP:
+					decrease_kp();
+					print_parameter_value();
+					break;
+				default:
+					break;
+				}
+				return;
+			}
+			if (o->btn0) {
+				mode_of_operation = MODE_IDLE;
+				printed = false;
+				o->done = true;
+				return;
+			}
+			break;
+		case MODE_IDLE:
+			if(o->btn0){
+				mode_of_operation = MODE_MODULATION;
+				printed = false;
+				o->done = true;
+			}
+			break;
+		case MODE_MODULATION:
+			if (o->btn3) {
+				increase_sp();
+				return;
+			}
+			if (o->btn2) {
+				decrease_sp();
+				return;
+			}
+			if (o->btn0) {
+				mode_of_operation = MODE_CONF;
+				printed = false;
+				o->done = true;
+				return;
+			}
+		default:
+			break;
+	}
+}
+
+void check_messages(){
+
+	char rx = uart_receive();
+
+	bool sem_is_free = is_console_semaphore_free();
+
+	if(mode_of_operation == MODE_CONF && !sem_is_free){
+		if(rx == '*'){
+			active_parameter = active_parameter == PARAM_KI ? PARAM_KP : PARAM_KI;
+			printed = false;
+		}
+		if(rx == '-'){
+			switch (active_parameter) {
+				case PARAM_KI:
+					decrease_ki();
+					print_parameter_value();
+					break;
+				case PARAM_KP:
+					decrease_kp();
+					print_parameter_value();
+				default:
+					break;
+			}
+		}
+		if(rx == '+'){
+			switch (active_parameter) {
+			case PARAM_KI:
+				increase_ki();
+				print_parameter_value();
+				break;
+			case PARAM_KP:
+				increase_kp();
+				print_parameter_value();
+			default:
+				break;
+			}
+		}
+	}
+
+	if(mode_of_operation == MODE_MODULATION){
+			if(rx == '+'){
+				increase_sp();
+			}
+			if(rx == '-'){
+				decrease_sp();
+			}
+		}
+
+
+	if(rx == '0'){
+		if(sem_is_free){
+			take_console_semaphore();
+
+		}
+		if(mode_of_operation != MODE_CONF){
+			mode_of_operation = MODE_CONF;
+			printed = false;
+		}
+
+
+	}
+	if(rx == '1'){
+		if(mode_of_operation != MODE_IDLE){
+			mode_of_operation = MODE_IDLE;
+			printed = false;
+		}
+		if(!sem_is_free){
+			release_console_semaphore();
+
+		}
+	}
+	if(rx == '2'){
+		if(mode_of_operation != MODE_MODULATION){
+			mode_of_operation = MODE_MODULATION;
+			printed = false;
+		}
+		if(!sem_is_free){
+			release_console_semaphore();
+
+		}
+	}
 }
