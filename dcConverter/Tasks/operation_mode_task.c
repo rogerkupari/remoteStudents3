@@ -41,7 +41,7 @@ void operation_mode_task(void *params){
 	xil_printf("uart '-' = decrease active parameter in configuration mode \n");
 	xil_printf("uart '-' = decrease setpoint in modulation mode \n");
 
-
+	release_console_semaphore();
 
 
 	for(;;){
