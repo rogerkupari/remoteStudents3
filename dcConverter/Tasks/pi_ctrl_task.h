@@ -2,6 +2,7 @@
 #define PI_CTRL_TASK_H
 
 #define SAMPLE_TIME_SECONDS 0.00002F
+#define OUTPUT_FREQ 50
 
 typedef struct {
 	volatile float *kp;
@@ -32,6 +33,7 @@ void pi_ctrl_task(void *params);
 void pi_init(volatile float *kp, volatile float *ki, float st, float min, float max, volatile float *sp, float meas, float out);
 float converterModel(float u_in);
 float PIController(volatile float *Kp, volatile float *Ki, float st, float min, float max, volatile float *sp, float meas);
+float dc_to_ac(float u);
 
 
 #endif
