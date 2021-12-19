@@ -37,9 +37,9 @@ void operation_mode_task(void *params){
 	xil_printf("uart '2' = modulation mode\n");
 	xil_printf("uart '*' = change ki or kp in configuration mode \n");
 	xil_printf("uart '+' = increase active parameter in configuration mode \n");
-	xil_printf("uart '+' = increase setpoint in configuration mode \n");
-	xil_printf("uart '+' = decrease active parameter in configuration mode \n");
-	xil_printf("uart '+' = decrease setpoint in configuration mode \n");
+	xil_printf("uart '+' = increase setpoint in modulation mode \n");
+	xil_printf("uart '-' = decrease active parameter in configuration mode \n");
+	xil_printf("uart '-' = decrease setpoint in modulation mode \n");
 
 
 
