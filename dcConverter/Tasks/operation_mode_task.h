@@ -45,9 +45,16 @@ void increase_sp(void);
 void decrease_sp(void);
 void print_parameter_value(void);
 
-bool take_semaphore(void);
-bool release_semaphore(void);
-bool is_semaphore_free(void);
+bool take_modulation_semaphore(void);
+bool release_modulation_semaphore(void);
+bool is_modulation_semaphore_free(void);
+
+bool take_console_semaphore(void);
+bool release_console_semaphore(void);
+bool is_console_semaphore_free(void);
+
+void operate_by_buttons(volatile mode_of_operation_def_t mode, volatile Button_operations_def_t *o);
+void check_messages(void);
 
 
 
