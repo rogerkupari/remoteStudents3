@@ -16,6 +16,7 @@ typedef struct {
 } PI_ctrl_def_t;
 
 volatile PI_ctrl_def_t _PI_ctrl;
+extern int PWM_toggle;
 
 static const float A[6][6] ={
 			{0.9652, 	-0.0172,	 0.0057,	-0.0058,	 0.0052,	-0.0251},
@@ -27,6 +28,9 @@ static const float A[6][6] ={
 	};
 
 static const float B[6] = {0.0471, 0.0377, 0.0404, 0.0485, 0.0373, 0.0539};
+
+
+
 
 
 void pi_ctrl_task(void *params);
