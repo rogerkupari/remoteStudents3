@@ -6,7 +6,7 @@
 #include <stdbool.h>
 #include <math.h>
 
-int PWM_toggle = 0;
+volatile int PWM_toggle = 0;
 
 void pi_ctrl_task(void *params){
 
@@ -30,6 +30,7 @@ void pi_ctrl_task(void *params){
 			float Pi_out = PIController(_PI_ctrl.kp, _PI_ctrl.ki, _PI_ctrl.st, _PI_ctrl.min, _PI_ctrl.max, _PI_ctrl.sp, _PI_ctrl.meas);
 
 			uint16_t TTC_match_value = (uint16_t) ((Pi_out - _PI_ctrl.min)/(_PI_ctrl.max - _PI_ctrl.min) * 65535); // Pi_out normalized to range [0,1] and scaled with 2^16-1
+			float pwm_value = (Pi_out - _PI_ctrl.min)/(_PI_ctrl.max - _PI_ctrl.min) * _PI_ctrl.max;
 
 			// PWM-signal for RGB LED
 			TTC0_MATCH_0 = TTC0_MATCH_1_COUNTER_2 = TTC0_MATCH_1_COUNTER_3 = TTC_match_value;
@@ -38,9 +39,10 @@ void pi_ctrl_task(void *params){
 			TTC1_MATCH_0 = TTC_match_value;
 
 
-			//KESKEN
+
 			float measurement = converterModel(Pi_out);
-			//float measurement = converterModel(testMax * PWM_toggle);
+			// bonus 2
+			//float measurement = converterModel(pwm_value * PWM_toggle);
 
 			_PI_ctrl.meas = measurement;
 			outputAc = dc_to_ac(measurement);
@@ -140,6 +142,30 @@ float dc_to_ac(float u){
 	float uAC = u * sin(2 * M_PI * OUTPUT_FREQ * 1/configTICK_RATE_HZ * sineCounter);
 	sineCounter++;
 	return uAC;
+}
+
+// Interrupt handler for TTC1 interrupts
+void prvTimerHandler(void *pvCallBackRef) {
+		uint32_t ulInterruptStatus;
+		XTtcPs *pxTimer = (XTtcPs *) pvCallBackRef;
+
+//BaseType_t xYieldRequired;
+
+		/* Read the interrupt status, then write it back to clear the interrupt. */
+		ulInterruptStatus = XTtcPs_GetInterruptStatus(pxTimer);
+		XTtcPs_ClearInterruptStatus(pxTimer, ulInterruptStatus);
+
+//PWM_toggle ^= 1;
+
+		int value = XTtcPs_GetCounterValue(pxTimer);
+		if (value == 0) {
+			PWM_toggle = 0;
+		} else {
+			PWM_toggle = 1;
+		}
+
+	//xil_printf("INTERRUPT %d %d\n", value, PWM_toggle);
+
 }
 
 
