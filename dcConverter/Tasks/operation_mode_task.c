@@ -5,11 +5,29 @@
 #include <stdbool.h>
 #include <stdio.h>
 
+/*
+ * UART
+ * (*) = change active (KP/KI) parameter in configuration mode (console)
+ * (+) = increase active parameter in configuration mode (console) or setpoint in modulation mode (RGB led/console)
+ * (-) = decrease active parameter in configuration mode (console) or setpoint in modulation mode (RGB led/console)
+ * 0 = configuration mode**
+ * 1 = IDLE mode**
+ * 2 = modulation mode**
+ * **see active mode by led [0=conf, 1=idle, 2=modulation] and console
+ *
+ * BUTTONS
+ * (0) = change mode (configuration/idle/modulation), see led [0=conf, 1=idle, 2=modulation] and console
+ * (1) = change active parameter, see console
+ * (2) = decrease active parameter in configuration mode (console) or setpoint in modulation mode (RGB led/console)
+ * (3) = increase active parameter in configuration mode (console) or setpoint in modulation mode (RGB led/console)
+ */
 
 
 volatile mode_of_operation_def_t mode_of_operation = MODE_CONF;
 volatile active_parameter_def_t active_parameter = PARAM_KI;
 volatile bool printed = false;
+
+volatile uint32_t button_act_time = 0;
 
 
 // for button based operations
@@ -41,14 +59,44 @@ void operation_mode_task(void *params){
 	xil_printf("uart '-' = decrease active parameter in configuration mode \n");
 	xil_printf("uart '-' = decrease setpoint in modulation mode \n");
 
-
+	take_modulation_semaphore();
+	release_console_semaphore();
+	release_button_semaphore();
 
 
 	for(;;){
 
-		check_messages();
+		/* If button sem is free, the buttons are not pressed in BUTTON_PREVENT_UART_TIME_SEC defined time
+		 * So mode can be operated by UART
+		 * ELSE
+		 * 		If least one of button has pressed
+		 * 		- Measure the time and if it exceed BUTTON_PREVENT_UART_TIME_SEC time
+		 * 		-> Release the semapore, otherwice do nothing
+		 */
+		if(is_button_semaphore_free()){
+			check_uart_messages();
+
+		} else {
+			// empty uart buffer to prevent later operations after sem release
+			char rx = uart_receive();
+			if((xTaskGetTickCount() - button_act_time) > BUTTON_PREVENT_UART_TICS){
+				release_button_semaphore();
+			}
+		}
+
+		/* Just poll the button register and if changes, wait until the SW operation(s) are done
+		 *
+		 */
 		read_buttons(&button_operations);
+		/* Check active mode and call button operations
+		 *  The operate_by_buttons will not operate if the console semaphore is reserved
+		 *
+		 */
 		check_mode_and_buttons(&button_operations);
+		/* Led 0 = Configuration
+		 * Led 1 = IDLE
+		 * Led 2 = Modulation
+		 */
 		led_indications(&mode_of_operation);
 
 
@@ -133,6 +181,9 @@ void read_buttons(volatile Button_operations_def_t *o) {
 }
 
 void print_message(int mode){
+	/* Just print console message which based to active mode and parameter
+	 * This function will be called only when the message output is needed
+	 */
 	char b[50];
 	if(mode == MODE_CONF){
 		xil_printf("Configuration mode, active parameter = ");
@@ -159,6 +210,11 @@ void print_message(int mode){
 }
 
 void led_indications(volatile mode_of_operation_def_t *mode){
+	/*
+	 * 	MODE_CONF, (0)
+	 *	MODE_IDLE, (1)
+	 *	MODE_MODULATION (2)
+	 */
 	AXI_LED_DATA = (1<<*mode);
 }
 
@@ -215,6 +271,35 @@ bool release_console_semaphore(){
 bool is_console_semaphore_free(){
 	return is_g_console_act_semaphore_free();
 }
+bool take_button_semaphore(){
+	// store the tick time into global variable
+	button_act_time = xTaskGetTickCount();
+
+	// already taken
+	if(!is_button_semaphore_free()){
+		return true;
+	}
+
+	if(xSemaphoreTake(g_button_act_semaphore, (TickType_t) 10) != pdTRUE){
+		return false;
+	}
+	return true;
+}
+bool release_button_semaphore(){
+	// already free
+	if(is_button_semaphore_free()){
+		return true;
+	}
+
+	if(xSemaphoreGive(g_button_act_semaphore) != pdTRUE){
+		return false;
+	}
+
+	return true;
+}
+bool is_button_semaphore_free(){
+	return is_g_button_act_semaphore_free();
+}
 
 void increase_ki(void){
 	ki_param_value += K_PARAMETER_CHANGE;
@@ -258,6 +343,7 @@ void operate_by_buttons(volatile mode_of_operation_def_t mode,volatile Button_op
 				active_parameter = active_parameter == PARAM_KI ? PARAM_KP : PARAM_KI;
 				printed = false;
 				o->done = true;
+				take_button_semaphore();
 				return;
 			}
 			if (o->btn3) {
@@ -265,10 +351,12 @@ void operate_by_buttons(volatile mode_of_operation_def_t mode,volatile Button_op
 				case PARAM_KI:
 					increase_ki();
 					print_parameter_value();
+					take_button_semaphore();
 					break;
 				case PARAM_KP:
 					increase_kp();
 					print_parameter_value();
+					take_button_semaphore();
 					break;
 				default:
 					break;
@@ -280,10 +368,12 @@ void operate_by_buttons(volatile mode_of_operation_def_t mode,volatile Button_op
 				case PARAM_KI:
 					decrease_ki();
 					print_parameter_value();
+					take_button_semaphore();
 					break;
 				case PARAM_KP:
 					decrease_kp();
 					print_parameter_value();
+					take_button_semaphore();
 					break;
 				default:
 					break;
@@ -294,6 +384,7 @@ void operate_by_buttons(volatile mode_of_operation_def_t mode,volatile Button_op
 				mode_of_operation = MODE_IDLE;
 				printed = false;
 				o->done = true;
+				take_button_semaphore();
 				return;
 			}
 			break;
@@ -302,29 +393,35 @@ void operate_by_buttons(volatile mode_of_operation_def_t mode,volatile Button_op
 				mode_of_operation = MODE_MODULATION;
 				printed = false;
 				o->done = true;
+				take_button_semaphore();
+				return;
 			}
 			break;
 		case MODE_MODULATION:
 			if (o->btn3) {
 				increase_sp();
+				take_button_semaphore();
 				return;
 			}
 			if (o->btn2) {
 				decrease_sp();
+				take_button_semaphore();
 				return;
 			}
 			if (o->btn0) {
 				mode_of_operation = MODE_CONF;
 				printed = false;
 				o->done = true;
+				take_button_semaphore();
 				return;
 			}
+			break;
 		default:
 			break;
 	}
 }
 
-void check_messages(){
+void check_uart_messages(){
 
 	char rx = uart_receive();
 

@@ -6,9 +6,7 @@
 #include <stdbool.h>
 #include <math.h>
 
-
-
-
+int PWM_toggle = 0;
 
 void pi_ctrl_task(void *params){
 
@@ -29,33 +27,27 @@ void pi_ctrl_task(void *params){
 	for(;;){
 
 		if(is_g_modulation_semaphore_free()){
-			// float PIController(float Kp, float Ki, float st, float min, float max, float ref, float meas);
 			float Pi_out = PIController(_PI_ctrl.kp, _PI_ctrl.ki, _PI_ctrl.st, _PI_ctrl.min, _PI_ctrl.max, _PI_ctrl.sp, _PI_ctrl.meas);
-			float measurement = converterModel(Pi_out);
-			_PI_ctrl.meas = measurement;
 
+			uint16_t TTC_match_value = (uint16_t) ((Pi_out - _PI_ctrl.min)/(_PI_ctrl.max - _PI_ctrl.min) * 65535); // Pi_out normalized to range [0,1] and scaled with 2^16-1
+
+			// PWM-signal for RGB LED
+			TTC0_MATCH_0 = TTC0_MATCH_1_COUNTER_2 = TTC0_MATCH_1_COUNTER_3 = TTC_match_value;
+
+			// PWM-signal for converter model
+			TTC1_MATCH_0 = TTC_match_value;
+
+
+			//KESKEN
+			float measurement = converterModel(Pi_out);
+			//float measurement = converterModel(testMax * PWM_toggle);
+
+			_PI_ctrl.meas = measurement;
 			outputAc = dc_to_ac(measurement);
 
 
-			uint16_t pwm_output = (uint16_t) ((Pi_out - _PI_ctrl.min)/(_PI_ctrl.max - _PI_ctrl.min) * 65535); // Pi_out normalized to range [0,1]				TTC0_MATCH_0 = TTC0_MATCH_1_COUNTER_2 = TTC0_MATCH_1_COUNTER_3 = pwm_output;
-
-			TTC0_MATCH_0 = TTC0_MATCH_1_COUNTER_2 = TTC0_MATCH_1_COUNTER_3 = pwm_output;
-			/*
-			// Referenssiarvon säätö napeilla
-			// Vain PI-säätimen ja mallin testausta varten
-			if (AXI_BTN_DATA == 0b0001 && button_released) {
-				_PI_ctrl.ref += 0.05;
-				button_released = 0;
-			} else if (AXI_BTN_DATA == 0b0010 && button_released) {
-				_PI_ctrl.ref -= 0.05;
-				button_released = 0;
-			} else if (AXI_BTN_DATA == 0b0000) {
-				button_released = 1;
-			}
-			*/
 			char charbuf[150];
-
-			sprintf(charbuf, "SP:%.2f, PI:%.2f, Meas:%.2f, Ki:%.2f, Kp:%.2f, Ac:%.2f\n", *_PI_ctrl.sp, Pi_out, measurement, *_PI_ctrl.ki, *_PI_ctrl.kp, outputAc);
+			sprintf(charbuf, "SP:%.2f, PI:%.2f, Meas:%.2f, Ki:%.2f, Kp:%.2f, Ac:%.2f, PWM:%d\n", *_PI_ctrl.sp, Pi_out, measurement, *_PI_ctrl.ki, *_PI_ctrl.kp, outputAc, PWM_toggle);
 			xil_printf(charbuf);
 
 

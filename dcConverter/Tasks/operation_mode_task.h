@@ -7,6 +7,9 @@
 #define K_PARAMETER_CHANGE 1.00f
 #define SP_PARAMETER_CHANGE 0.10f
 
+#define BUTTON_PREVENT_UART_TIME_SEC 5
+#define BUTTON_PREVENT_UART_TICS 	BUTTON_PREVENT_UART_TIME_SEC*1000UL
+
 
 typedef struct {
 	uint32_t btn0:1; //
@@ -53,8 +56,12 @@ bool take_console_semaphore(void);
 bool release_console_semaphore(void);
 bool is_console_semaphore_free(void);
 
+bool take_button_semaphore(void);
+bool release_button_semaphore(void);
+bool is_button_semaphore_free(void);
+
 void operate_by_buttons(volatile mode_of_operation_def_t mode, volatile Button_operations_def_t *o);
-void check_messages(void);
+void check_uart_messages(void);
 
 
 

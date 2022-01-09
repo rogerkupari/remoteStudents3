@@ -5,6 +5,48 @@
 #include <xttcps.h>
 #include "pi_ctrl_task.h"
 #include <xil_printf.h>
+#include <xscugic.h>
+
+
+
+#define tmrTIMERS_USED	3
+#define PRESCALE 9
+
+static void prvTimerHandler( void *CallBackRef );
+
+/* Hardware constants for TTC1. */
+static const BaseType_t xDeviceIDs[ tmrTIMERS_USED ] = { XPAR_XTTCPS_3_DEVICE_ID, XPAR_XTTCPS_4_DEVICE_ID, XPAR_XTTCPS_5_DEVICE_ID };
+static const BaseType_t xInterruptIDs[ tmrTIMERS_USED ] = { XPAR_XTTCPS_3_INTR, XPAR_XTTCPS_4_INTR, XPAR_XTTCPS_5_INTR };
+
+/* Timer configuration settings. */
+typedef struct
+{
+	uint32_t OutputHz;	/* Output frequency. */
+	uint16_t Interval;	/* Interval value. */
+	uint8_t Prescaler;	/* Prescaler value. */
+	uint16_t Options;	/* Option settings. */
+} TmrCntrSetup;
+
+static TmrCntrSetup xTimerSettings[ tmrTIMERS_USED ] =
+{
+	{ 1, 0, PRESCALE, XTTCPS_OPTION_MATCH_MODE | XTTCPS_OPTION_WAVE_DISABLE },
+	{ 1, 0, PRESCALE, XTTCPS_OPTION_MATCH_MODE | XTTCPS_OPTION_WAVE_DISABLE },
+	{ 1, 0, PRESCALE, XTTCPS_OPTION_MATCH_MODE | XTTCPS_OPTION_WAVE_DISABLE }
+};
+
+/* Lower priority number means higher logical priority, so
+configMAX_API_CALL_INTERRUPT_PRIORITY - 1 is above the maximum system call
+interrupt priority. */
+static const UBaseType_t uxInterruptPriorities[ tmrTIMERS_USED ] =
+{
+	configMAX_API_CALL_INTERRUPT_PRIORITY + 1,
+	configMAX_API_CALL_INTERRUPT_PRIORITY,
+	configMAX_API_CALL_INTERRUPT_PRIORITY - 1
+};
+
+static XTtcPs xTimerInstances[ tmrTIMERS_USED ];
+
+
 
 
 
@@ -48,7 +90,7 @@ void hardware_init(){
 	// leds = output
 	AXI_LED_TRI = ~0xF;
 
-	// clock control prescaler / 1
+//	// clock control prescaler / 1
 	TTC0_CLK_CNTRL  = (0 << XTTCPS_CLK_CNTRL_PS_VAL_SHIFT) | XTTCPS_CLK_CNTRL_PS_EN_MASK;
 	TTC0_CLK_CNTRL2 = (0 << XTTCPS_CLK_CNTRL_PS_VAL_SHIFT) | XTTCPS_CLK_CNTRL_PS_EN_MASK;
 	TTC0_CLK_CNTRL3 = (0 << XTTCPS_CLK_CNTRL_PS_VAL_SHIFT) | XTTCPS_CLK_CNTRL_PS_EN_MASK;
@@ -68,6 +110,9 @@ void hardware_init(){
 	TTC0_CNT_CNTRL2 &= ~XTTCPS_CNT_CNTRL_DIS_MASK;
 	TTC0_CNT_CNTRL3 &= ~XTTCPS_CNT_CNTRL_DIS_MASK;
 
+
+	// Initialise interrupt timer TTC1
+	vInitialiseInterruptTimer();
 
 	uint32_t r = 0; // Temporary value variable
 	r = UART_CTRL;
@@ -106,6 +151,119 @@ void hardware_init(){
 
 
 
+
+
+}
+
+
+// Initialises TTC1 for interrupts. Modified from FreeRTOS demo code
+void vInitialiseInterruptTimer( void )
+{
+BaseType_t xStatus;
+TmrCntrSetup *pxTimerSettings;
+extern XScuGic xInterruptController;
+//BaseType_t xTimer;
+XTtcPs *pxTimerInstance;
+XTtcPs_Config *pxTimerConfiguration;
+const uint8_t ucRisingEdge = 3;
+XScuGic_Config *pxGICConfig;
+
+
+	/* Ensure no interrupts execute while the scheduler is in an inconsistent
+	state.  Interrupts are automatically enabled when the scheduler is
+	started. */
+	portDISABLE_INTERRUPTS();
+
+	/* Obtain the configuration of the GIC. */
+	pxGICConfig = XScuGic_LookupConfig( XPAR_SCUGIC_SINGLE_DEVICE_ID );
+
+	/* Sanity check the FreeRTOSConfig.h settings are correct for the
+	hardware. */
+	configASSERT( pxGICConfig );
+	configASSERT( pxGICConfig->CpuBaseAddress == ( configINTERRUPT_CONTROLLER_BASE_ADDRESS + configINTERRUPT_CONTROLLER_CPU_INTERFACE_OFFSET ) );
+	configASSERT( pxGICConfig->DistBaseAddress == configINTERRUPT_CONTROLLER_BASE_ADDRESS );
+
+	/* Install a default handler for each GIC interrupt. */
+	xStatus = XScuGic_CfgInitialize( &xInterruptController, pxGICConfig, pxGICConfig->CpuBaseAddress );
+	configASSERT( xStatus == XST_SUCCESS );
+	( void ) xStatus; /* Remove compiler warning if configASSERT() is not defined. */
+
+
+	/* Look up the timer's configuration. */
+	pxTimerInstance = &( xTimerInstances[ 0 ] );
+	pxTimerConfiguration = XTtcPs_LookupConfig( xDeviceIDs[ 0 ] );
+	configASSERT( pxTimerConfiguration );
+
+	pxTimerSettings = &( xTimerSettings[ 0 ] );
+
+	/* Initialise the device. */
+	xStatus = XTtcPs_CfgInitialize( pxTimerInstance, pxTimerConfiguration, pxTimerConfiguration->BaseAddress );
+	if( xStatus != XST_SUCCESS )
+	{
+		/* Not sure how to do this before XTtcPs_CfgInitialize is called
+		as pxTimerInstance is set within XTtcPs_CfgInitialize(). */
+		XTtcPs_Stop( pxTimerInstance );
+		xStatus = XTtcPs_CfgInitialize( pxTimerInstance, pxTimerConfiguration, pxTimerConfiguration->BaseAddress );
+		configASSERT( xStatus == XST_SUCCESS );
+	}
+
+
+	/* Set the options. */
+	XTtcPs_SetOptions( pxTimerInstance, pxTimerSettings->Options );
+
+	/* Initialise match value */
+	TTC1_MATCH_0 = 0;
+
+	/* Reset interrupt by reading the interrupt status register */
+	int temp = XTtcPs_GetInterruptStatus( pxTimerInstance );
+
+	/* Set prescale. */
+	XTtcPs_SetPrescaler( pxTimerInstance, pxTimerSettings->Prescaler );
+
+	/* The priority must be the lowest possible. */
+	XScuGic_SetPriorityTriggerType( &xInterruptController, xInterruptIDs[ 0 ], uxInterruptPriorities[ 0 ] << portPRIORITY_SHIFT, ucRisingEdge );
+
+	/* Connect to the interrupt controller. */
+	xStatus = XScuGic_Connect( &xInterruptController, xInterruptIDs[ 0 ], ( Xil_InterruptHandler ) prvTimerHandler, ( void * ) pxTimerInstance );
+	configASSERT( xStatus == XST_SUCCESS);
+
+	/* Enable the interrupt in the GIC. */
+	XScuGic_Enable( &xInterruptController, xInterruptIDs[ 0 ] );
+
+	/* Enable the interrupts in the timer. */
+	XTtcPs_EnableInterrupts( pxTimerInstance, XTTCPS_IXR_MATCH_0_MASK | XTTCPS_IXR_CNT_OVR_MASK);
+
+	/* Start the timer. */
+	XTtcPs_Start( pxTimerInstance );
+
+}
+
+
+
+// Interrupt handler for TTC1 interrupts
+static void prvTimerHandler( void *pvCallBackRef )
+{
+uint32_t ulInterruptStatus;
+XTtcPs *pxTimer = ( XTtcPs * ) pvCallBackRef;
+
+//BaseType_t xYieldRequired;
+
+
+
+/* Read the interrupt status, then write it back to clear the interrupt. */
+ulInterruptStatus = XTtcPs_GetInterruptStatus( pxTimer );
+XTtcPs_ClearInterruptStatus( pxTimer, ulInterruptStatus );
+
+//PWM_toggle ^= 1;
+int value = XTtcPs_GetCounterValue(pxTimer);
+if (value == 0){
+	PWM_toggle = 1;
+}
+else {PWM_toggle = 0;
+}
+
+
+//xil_printf("INTERRUPT %d %d\n", value, PWM_toggle);
 
 
 }
