@@ -16,7 +16,10 @@ typedef struct {
 } PI_ctrl_def_t;
 
 volatile PI_ctrl_def_t _PI_ctrl;
+<<<<<<< HEAD
 extern volatile int PWM_toggle;
+=======
+>>>>>>> d7e62cb1ef7d69838c59c0e330706d7beb01c897
 
 static const float A[6][6] ={
 			{0.9652, 	-0.0172,	 0.0057,	-0.0058,	 0.0052,	-0.0251},
@@ -38,6 +41,8 @@ void pi_init(volatile float *kp, volatile float *ki, float st, float min, float 
 float converterModel(float u_in);
 float PIController(volatile float *Kp, volatile float *Ki, float st, float min, float max, volatile float *sp, float meas);
 float dc_to_ac(float u);
+
+void prvTimerHandler( void *CallBackRef );
 
 
 #endif

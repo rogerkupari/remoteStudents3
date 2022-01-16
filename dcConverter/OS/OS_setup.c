@@ -10,22 +10,18 @@
 
 
 #define tmrTIMERS_USED	3
+<<<<<<< HEAD
 #define PRESCALE 15
+=======
+#define PRESCALE 6
+>>>>>>> d7e62cb1ef7d69838c59c0e330706d7beb01c897
 
-static void prvTimerHandler( void *CallBackRef );
+extern void prvTimerHandler( void *CallBackRef );
 
 /* Hardware constants for TTC1. */
-static const BaseType_t xDeviceIDs[ tmrTIMERS_USED ] = { XPAR_XTTCPS_3_DEVICE_ID, XPAR_XTTCPS_4_DEVICE_ID, XPAR_XTTCPS_5_DEVICE_ID };
-static const BaseType_t xInterruptIDs[ tmrTIMERS_USED ] = { XPAR_XTTCPS_3_INTR, XPAR_XTTCPS_4_INTR, XPAR_XTTCPS_5_INTR };
+const BaseType_t xDeviceIDs[ tmrTIMERS_USED ] = { XPAR_XTTCPS_3_DEVICE_ID, XPAR_XTTCPS_4_DEVICE_ID, XPAR_XTTCPS_5_DEVICE_ID };
+const BaseType_t xInterruptIDs[ tmrTIMERS_USED ] = { XPAR_XTTCPS_3_INTR, XPAR_XTTCPS_4_INTR, XPAR_XTTCPS_5_INTR };
 
-/* Timer configuration settings. */
-typedef struct
-{
-	uint32_t OutputHz;	/* Output frequency. */
-	uint16_t Interval;	/* Interval value. */
-	uint8_t Prescaler;	/* Prescaler value. */
-	uint16_t Options;	/* Option settings. */
-} TmrCntrSetup;
 
 static TmrCntrSetup xTimerSettings[ tmrTIMERS_USED ] =
 {
@@ -37,7 +33,7 @@ static TmrCntrSetup xTimerSettings[ tmrTIMERS_USED ] =
 /* Lower priority number means higher logical priority, so
 configMAX_API_CALL_INTERRUPT_PRIORITY - 1 is above the maximum system call
 interrupt priority. */
-static const UBaseType_t uxInterruptPriorities[ tmrTIMERS_USED ] =
+const UBaseType_t uxInterruptPriorities[ tmrTIMERS_USED ] =
 {
 	configMAX_API_CALL_INTERRUPT_PRIORITY + 1,
 	configMAX_API_CALL_INTERRUPT_PRIORITY,
@@ -239,31 +235,3 @@ XScuGic_Config *pxGICConfig;
 }
 
 
-
-// Interrupt handler for TTC1 interrupts
-static void prvTimerHandler( void *pvCallBackRef )
-{
-uint32_t ulInterruptStatus;
-XTtcPs *pxTimer = ( XTtcPs * ) pvCallBackRef;
-
-//BaseType_t xYieldRequired;
-
-
-
-/* Read the interrupt status, then write it back to clear the interrupt. */
-ulInterruptStatus = XTtcPs_GetInterruptStatus( pxTimer );
-XTtcPs_ClearInterruptStatus( pxTimer, ulInterruptStatus );
-
-//PWM_toggle ^= 1;
-int value = XTtcPs_GetCounterValue(pxTimer);
-if (value == 0){
-	PWM_toggle = 1;
-}
-else {PWM_toggle = 0;
-}
-
-
-//xil_printf("INTERRUPT %d %d\n", value, PWM_toggle);
-
-
-}
