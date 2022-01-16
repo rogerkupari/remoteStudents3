@@ -16,11 +16,9 @@ typedef struct {
 } PI_ctrl_def_t;
 
 volatile PI_ctrl_def_t _PI_ctrl;
-<<<<<<< HEAD
-extern volatile int PWM_toggle;
-=======
->>>>>>> d7e62cb1ef7d69838c59c0e330706d7beb01c897
 
+
+// Converter model state space variables
 static const float A[6][6] ={
 			{0.9652, 	-0.0172,	 0.0057,	-0.0058,	 0.0052,	-0.0251},
 			{0.7732, 	 0.1252,	 0.2315,	 0.07,		 0.1282,	 0.7754},

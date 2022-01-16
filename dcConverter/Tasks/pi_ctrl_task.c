@@ -9,13 +9,15 @@
 volatile int PWM_toggle = 0;
 
 void pi_ctrl_task(void *params){
-
+	// Main control loop of the PI controller, converter model and inverter model
+	// Inputs: Voltage amplitude setpoint
+	// Outputs: AC inverter output (outputAC), PWM-signal (PWM_toggle), RGB-led indicator
+	// Execution interval: 100 ms
 
 	float testMin = 0.0;
 	float testMax = 5.0;
 	float testMeas = 0.0;
 	float testOut = 0.0;
-
 	float outputAc = 0.0;
 
 	// wait while ki/kp/setpoint pointers are uninitialized state
@@ -27,10 +29,13 @@ void pi_ctrl_task(void *params){
 	for(;;){
 
 		if(is_g_modulation_semaphore_free()){
+
+			// Calculate PI controller output
 			float Pi_out = PIController(_PI_ctrl.kp, _PI_ctrl.ki, _PI_ctrl.st, _PI_ctrl.min, _PI_ctrl.max, _PI_ctrl.sp, _PI_ctrl.meas);
 
-			uint16_t TTC_match_value = (uint16_t) ((Pi_out - _PI_ctrl.min)/(_PI_ctrl.max - _PI_ctrl.min) * 65535); // Pi_out normalized to range [0,1] and scaled with 2^16-1
-			float pwm_value = (Pi_out - _PI_ctrl.min)/(_PI_ctrl.max - _PI_ctrl.min) * _PI_ctrl.max;
+			// Pi_out normalized to range [0,1] and scaled with 2^16-1
+			uint16_t TTC_match_value = (uint16_t) ((Pi_out - _PI_ctrl.min)/(_PI_ctrl.max - _PI_ctrl.min) * 65535);
+			//float pwm_value = (Pi_out - _PI_ctrl.min)/(_PI_ctrl.max - _PI_ctrl.min) * _PI_ctrl.max;
 
 			// PWM-signal for RGB LED
 			TTC0_MATCH_0 = TTC0_MATCH_1_COUNTER_2 = TTC0_MATCH_1_COUNTER_3 = TTC_match_value;
@@ -39,21 +44,17 @@ void pi_ctrl_task(void *params){
 			TTC1_MATCH_0 = TTC_match_value;
 
 
-<<<<<<< HEAD
-			//KESKEN
-			//float measurement = converterModel(Pi_out);
-			float measurement = converterModel(testMax *  PWM_toggle);
-=======
-
 			float measurement = converterModel(Pi_out);
-			// bonus 2
+			// bonus 2, kesken
 			//float measurement = converterModel(pwm_value * PWM_toggle);
->>>>>>> d7e62cb1ef7d69838c59c0e330706d7beb01c897
 
+			// Update measured voltage for PI
 			_PI_ctrl.meas = measurement;
+
+			// Calculate AC output
 			outputAc = dc_to_ac(measurement);
 
-
+			// Print values to serial terminal
 			char charbuf[150];
 			sprintf(charbuf, "SP:%.2f, PI:%.2f, Meas:%.2f, Ki:%.2f, Kp:%.2f, Ac:%.2f, PWM:%d\n", *_PI_ctrl.sp, Pi_out, measurement, *_PI_ctrl.ki, *_PI_ctrl.kp, outputAc, PWM_toggle);
 			xil_printf(charbuf);
@@ -74,6 +75,7 @@ void pi_ctrl_task(void *params){
 }
 
 void pi_init(volatile float *kp, volatile float *ki, float st, float min, float max, volatile float *sp, float meas, float out){
+	// Initialises PI controller variables
 	_PI_ctrl.kp = kp;
 	_PI_ctrl.ki = ki;
 	_PI_ctrl.st = st;
@@ -137,7 +139,7 @@ float PIController(volatile float *Ki, volatile float *Kp, float st, float min, 
 
 float dc_to_ac(float u){
 	// Converts converter model output from DC to AC
-	//FreeRTOS tick rate must be divisible by output frequency to eliminate phase error when sineCounter resets
+	// FreeRTOS tick rate must be divisible by output frequency to eliminate phase error when sineCounter resets
 	// library "m" must be added to project C/C++ Build settings/linker/libraries for sin function
 	static int sineCounter = 0;
 
@@ -150,25 +152,23 @@ float dc_to_ac(float u){
 	return uAC;
 }
 
-// Interrupt handler for TTC1 interrupts
+
 void prvTimerHandler(void *pvCallBackRef) {
-		uint32_t ulInterruptStatus;
-		XTtcPs *pxTimer = (XTtcPs *) pvCallBackRef;
+	// Interrupt handler triggered by TTC1
+	// Toggles PWM signal output
+	uint32_t ulInterruptStatus;
+	XTtcPs *pxTimer = (XTtcPs *) pvCallBackRef;
 
-//BaseType_t xYieldRequired;
+	/* Read the interrupt status, then write it back to clear the interrupt. */
+	ulInterruptStatus = XTtcPs_GetInterruptStatus(pxTimer);
+	XTtcPs_ClearInterruptStatus(pxTimer, ulInterruptStatus);
 
-		/* Read the interrupt status, then write it back to clear the interrupt. */
-		ulInterruptStatus = XTtcPs_GetInterruptStatus(pxTimer);
-		XTtcPs_ClearInterruptStatus(pxTimer, ulInterruptStatus);
-
-//PWM_toggle ^= 1;
-
-		int value = XTtcPs_GetCounterValue(pxTimer);
-		if (value == 0) {
-			PWM_toggle = 0;
-		} else {
-			PWM_toggle = 1;
-		}
+	int value = XTtcPs_GetCounterValue(pxTimer);
+	if (value == 0) {
+		PWM_toggle = 0;
+	} else {
+		PWM_toggle = 1;
+	}
 
 	//xil_printf("INTERRUPT %d %d\n", value, PWM_toggle);
 

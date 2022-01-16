@@ -10,11 +10,7 @@
 
 
 #define tmrTIMERS_USED	3
-<<<<<<< HEAD
-#define PRESCALE 15
-=======
 #define PRESCALE 6
->>>>>>> d7e62cb1ef7d69838c59c0e330706d7beb01c897
 
 extern void prvTimerHandler( void *CallBackRef );
 
@@ -152,85 +148,90 @@ void hardware_init(){
 }
 
 
-// Initialises TTC1 for interrupts. Modified from FreeRTOS demo code
-void vInitialiseInterruptTimer( void )
-{
-BaseType_t xStatus;
-TmrCntrSetup *pxTimerSettings;
-extern XScuGic xInterruptController;
-//BaseType_t xTimer;
-XTtcPs *pxTimerInstance;
-XTtcPs_Config *pxTimerConfiguration;
-const uint8_t ucRisingEdge = 3;
-XScuGic_Config *pxGICConfig;
 
+void vInitialiseInterruptTimer(void) {
+	// Initialises TTC1 for interrupts. Modified from FreeRTOS demo code
+	// Interrupt is triggered by counter match and overflow
+
+	BaseType_t xStatus;
+	TmrCntrSetup *pxTimerSettings;
+	extern XScuGic xInterruptController;
+	XTtcPs *pxTimerInstance;
+	XTtcPs_Config *pxTimerConfiguration;
+	const uint8_t ucRisingEdge = 3;
+	XScuGic_Config *pxGICConfig;
 
 	/* Ensure no interrupts execute while the scheduler is in an inconsistent
-	state.  Interrupts are automatically enabled when the scheduler is
-	started. */
+	 state.  Interrupts are automatically enabled when the scheduler is
+	 started. */
 	portDISABLE_INTERRUPTS();
 
 	/* Obtain the configuration of the GIC. */
-	pxGICConfig = XScuGic_LookupConfig( XPAR_SCUGIC_SINGLE_DEVICE_ID );
+	pxGICConfig = XScuGic_LookupConfig( XPAR_SCUGIC_SINGLE_DEVICE_ID);
 
 	/* Sanity check the FreeRTOSConfig.h settings are correct for the
-	hardware. */
-	configASSERT( pxGICConfig );
-	configASSERT( pxGICConfig->CpuBaseAddress == ( configINTERRUPT_CONTROLLER_BASE_ADDRESS + configINTERRUPT_CONTROLLER_CPU_INTERFACE_OFFSET ) );
-	configASSERT( pxGICConfig->DistBaseAddress == configINTERRUPT_CONTROLLER_BASE_ADDRESS );
+	 hardware. */
+	configASSERT(pxGICConfig);
+	configASSERT(
+			pxGICConfig->CpuBaseAddress == ( configINTERRUPT_CONTROLLER_BASE_ADDRESS + configINTERRUPT_CONTROLLER_CPU_INTERFACE_OFFSET ));
+	configASSERT(
+			pxGICConfig->DistBaseAddress == configINTERRUPT_CONTROLLER_BASE_ADDRESS);
 
 	/* Install a default handler for each GIC interrupt. */
-	xStatus = XScuGic_CfgInitialize( &xInterruptController, pxGICConfig, pxGICConfig->CpuBaseAddress );
-	configASSERT( xStatus == XST_SUCCESS );
-	( void ) xStatus; /* Remove compiler warning if configASSERT() is not defined. */
-
+	xStatus = XScuGic_CfgInitialize(&xInterruptController, pxGICConfig,
+			pxGICConfig->CpuBaseAddress);
+	configASSERT(xStatus == XST_SUCCESS);
+	(void) xStatus; /* Remove compiler warning if configASSERT() is not defined. */
 
 	/* Look up the timer's configuration. */
-	pxTimerInstance = &( xTimerInstances[ 0 ] );
-	pxTimerConfiguration = XTtcPs_LookupConfig( xDeviceIDs[ 0 ] );
-	configASSERT( pxTimerConfiguration );
+	pxTimerInstance = &(xTimerInstances[0]);
+	pxTimerConfiguration = XTtcPs_LookupConfig(xDeviceIDs[0]);
+	configASSERT(pxTimerConfiguration);
 
-	pxTimerSettings = &( xTimerSettings[ 0 ] );
+	pxTimerSettings = &(xTimerSettings[0]);
 
 	/* Initialise the device. */
-	xStatus = XTtcPs_CfgInitialize( pxTimerInstance, pxTimerConfiguration, pxTimerConfiguration->BaseAddress );
-	if( xStatus != XST_SUCCESS )
-	{
+	xStatus = XTtcPs_CfgInitialize(pxTimerInstance, pxTimerConfiguration,
+			pxTimerConfiguration->BaseAddress);
+	if (xStatus != XST_SUCCESS) {
 		/* Not sure how to do this before XTtcPs_CfgInitialize is called
-		as pxTimerInstance is set within XTtcPs_CfgInitialize(). */
-		XTtcPs_Stop( pxTimerInstance );
-		xStatus = XTtcPs_CfgInitialize( pxTimerInstance, pxTimerConfiguration, pxTimerConfiguration->BaseAddress );
-		configASSERT( xStatus == XST_SUCCESS );
+		 as pxTimerInstance is set within XTtcPs_CfgInitialize(). */
+		XTtcPs_Stop(pxTimerInstance);
+		xStatus = XTtcPs_CfgInitialize(pxTimerInstance, pxTimerConfiguration,
+				pxTimerConfiguration->BaseAddress);
+		configASSERT(xStatus == XST_SUCCESS);
 	}
 
-
 	/* Set the options. */
-	XTtcPs_SetOptions( pxTimerInstance, pxTimerSettings->Options );
+	XTtcPs_SetOptions(pxTimerInstance, pxTimerSettings->Options);
 
 	/* Initialise match value */
 	TTC1_MATCH_0 = 0;
 
 	/* Reset interrupt by reading the interrupt status register */
-	int temp = XTtcPs_GetInterruptStatus( pxTimerInstance );
+	int temp = XTtcPs_GetInterruptStatus(pxTimerInstance);
 
 	/* Set prescale. */
-	XTtcPs_SetPrescaler( pxTimerInstance, pxTimerSettings->Prescaler );
+	XTtcPs_SetPrescaler(pxTimerInstance, pxTimerSettings->Prescaler);
 
 	/* The priority must be the lowest possible. */
-	XScuGic_SetPriorityTriggerType( &xInterruptController, xInterruptIDs[ 0 ], uxInterruptPriorities[ 0 ] << portPRIORITY_SHIFT, ucRisingEdge );
+	XScuGic_SetPriorityTriggerType(&xInterruptController, xInterruptIDs[0],
+			uxInterruptPriorities[0] << portPRIORITY_SHIFT, ucRisingEdge);
 
 	/* Connect to the interrupt controller. */
-	xStatus = XScuGic_Connect( &xInterruptController, xInterruptIDs[ 0 ], ( Xil_InterruptHandler ) prvTimerHandler, ( void * ) pxTimerInstance );
-	configASSERT( xStatus == XST_SUCCESS);
+	xStatus = XScuGic_Connect(&xInterruptController, xInterruptIDs[0],
+			(Xil_InterruptHandler) prvTimerHandler, (void *) pxTimerInstance);
+	configASSERT(xStatus == XST_SUCCESS);
 
 	/* Enable the interrupt in the GIC. */
-	XScuGic_Enable( &xInterruptController, xInterruptIDs[ 0 ] );
+	XScuGic_Enable(&xInterruptController, xInterruptIDs[0]);
 
-	/* Enable the interrupts in the timer. */
-	XTtcPs_EnableInterrupts( pxTimerInstance, XTTCPS_IXR_MATCH_0_MASK | XTTCPS_IXR_CNT_OVR_MASK);
+	/* Enable the match and overflow interrupts in the timer. */
+	XTtcPs_EnableInterrupts(pxTimerInstance,
+			XTTCPS_IXR_MATCH_0_MASK | XTTCPS_IXR_CNT_OVR_MASK);
 
 	/* Start the timer. */
-	XTtcPs_Start( pxTimerInstance );
+	XTtcPs_Start(pxTimerInstance);
 
 }
 
