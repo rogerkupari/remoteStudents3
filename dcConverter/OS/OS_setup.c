@@ -10,7 +10,7 @@
 
 
 #define tmrTIMERS_USED	3
-#define PRESCALE 9
+#define PRESCALE 15
 
 static void prvTimerHandler( void *CallBackRef );
 

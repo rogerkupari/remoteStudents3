@@ -6,7 +6,7 @@
 #include <stdbool.h>
 #include <math.h>
 
-int PWM_toggle = 0;
+volatile int PWM_toggle = 0;
 
 void pi_ctrl_task(void *params){
 
@@ -39,8 +39,8 @@ void pi_ctrl_task(void *params){
 
 
 			//KESKEN
-			float measurement = converterModel(Pi_out);
-			//float measurement = converterModel(testMax * PWM_toggle);
+			//float measurement = converterModel(Pi_out);
+			float measurement = converterModel(testMax *  PWM_toggle);
 
 			_PI_ctrl.meas = measurement;
 			outputAc = dc_to_ac(measurement);
